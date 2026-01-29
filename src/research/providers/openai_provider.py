@@ -53,10 +53,16 @@ class OpenAIProvider(BaseProvider):
             # TODO: Implement actual web search in Phase 3
             
             # Make API call
+            logger.info(f"Sending request to OpenAI: model={self.model}, max_tokens={self.max_tokens}")
             response = await self._client.chat.completions.create(**kwargs)
             
             message = response.choices[0].message
+            logger.info(f"OpenAI raw response: content={message.content!r}, tool_calls={message.tool_calls}")
+            
             summary = message.content or ""
+            
+            if not summary and message.tool_calls:
+                logger.warning("Model returned tool_calls instead of content - tools should be disabled!")
             
             logger.info(f"OpenAI response content length: {len(summary)}")
             latency_ms = int((time.time() - start_time) * 1000)
