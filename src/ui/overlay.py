@@ -195,10 +195,15 @@ class OverlayWindow(QWidget):
         self.provider_label.setText(f"📡 {result.provider.title()} {result.model}")
         self.latency_label.setText(f"⏱️ {result.latency_ms / 1000:.1f}s")
         
-        # Force layout update and resize to fit content
-        self.content_label.adjustSize()
-        self.container.adjustSize()
-        self.adjustSize()
+        # Calculate required height for word-wrapped text
+        from PyQt6.QtGui import QFontMetrics
+        fm = QFontMetrics(self.content_label.font())
+        text_width = self._width - 40  # Account for padding/margins
+        text_rect = fm.boundingRect(0, 0, text_width, 10000, 
+                                     Qt.TextFlag.TextWordWrap, result.summary)
+        content_height = text_rect.height() + 120  # Add space for header/footer
+        
+        self.setFixedHeight(min(content_height, 600))  # Cap at 600px max
         self._position_window()
         
         logger.info(f"Overlay geometry: {self.geometry()}, visible: {self.isVisible()}")
