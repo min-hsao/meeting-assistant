@@ -57,8 +57,7 @@ class OverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         
         self.setFixedWidth(self._width)
-        self.setMinimumHeight(200)
-        self.setMaximumHeight(500)  # Allow taller overlay
+        # No height constraints - let it auto-size to content
     
     def _setup_ui(self):
         """Setup UI components"""
@@ -122,18 +121,15 @@ class OverlayWindow(QWidget):
         divider.setStyleSheet("background-color: rgba(255, 255, 255, 0.1);")
         container_layout.addWidget(divider)
         
-        # Content
+        # Content - auto-sizes to fit text
         self.content_label = QLabel()
         self.content_label.setWordWrap(True)
         self.content_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.9);
             font-size: 13px;
-            line-height: 1.5;
-            padding: 8px 0;
         """)
         self.content_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.content_label.setMinimumHeight(100)
-        container_layout.addWidget(self.content_label, 1)  # stretch factor
+        container_layout.addWidget(self.content_label)
         
         # Footer divider
         footer_divider = QWidget()
@@ -199,7 +195,9 @@ class OverlayWindow(QWidget):
         self.provider_label.setText(f"📡 {result.provider.title()} {result.model}")
         self.latency_label.setText(f"⏱️ {result.latency_ms / 1000:.1f}s")
         
-        # Adjust size and position
+        # Force layout update and resize to fit content
+        self.content_label.adjustSize()
+        self.container.adjustSize()
         self.adjustSize()
         self._position_window()
         
