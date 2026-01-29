@@ -57,6 +57,8 @@ class OverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         
         self.setFixedWidth(self._width)
+        self.setMinimumHeight(200)
+        self.setMaximumHeight(500)  # Allow taller overlay
     
     def _setup_ui(self):
         """Setup UI components"""
@@ -126,10 +128,12 @@ class OverlayWindow(QWidget):
         self.content_label.setStyleSheet("""
             color: rgba(255, 255, 255, 0.9);
             font-size: 13px;
-            line-height: 1.4;
+            line-height: 1.5;
+            padding: 8px 0;
         """)
         self.content_label.setTextFormat(Qt.TextFormat.PlainText)
-        container_layout.addWidget(self.content_label)
+        self.content_label.setMinimumHeight(100)
+        container_layout.addWidget(self.content_label, 1)  # stretch factor
         
         # Footer divider
         footer_divider = QWidget()
