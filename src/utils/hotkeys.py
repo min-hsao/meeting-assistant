@@ -39,6 +39,21 @@ class HotkeyManager:
         key = key.replace("cmd+", "<cmd>+")
         key = key.replace("comma", ",")
         
+        # Handle standalone special keys
+        special_keys = {
+            "escape": "<esc>",
+            "esc": "<esc>",
+            "enter": "<enter>",
+            "return": "<enter>",
+            "space": "<space>",
+            "tab": "<tab>",
+            "backspace": "<backspace>",
+            "delete": "<delete>",
+        }
+        
+        if key in special_keys:
+            return special_keys[key]
+        
         return key
     
     def start(self):
