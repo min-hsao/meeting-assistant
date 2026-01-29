@@ -90,7 +90,9 @@ class AudioProcessor(QObject):
                     # Research the topic
                     result = self.research.research_sync(match.topic)
                     self.logger.log_search(result, match.trigger_phrase)
+                    logging.getLogger(__name__).info(f"Emitting result_ready signal for: {result.topic}")
                     self.result_ready.emit(result)
+                    logging.getLogger(__name__).info("Signal emitted")
         
         except Exception as e:
             logging.getLogger(__name__).error(f"Processing error: {e}")
@@ -209,7 +211,14 @@ class MeetingAssistant:
     
     def _on_result(self, result: ResearchResult):
         """Handle research result"""
-        self.overlay.show_result(result)
+        self.logger.info(f"_on_result called with topic: {result.topic}")
+        self.logger.info(f"Result success: {result.success}, summary length: {len(result.summary)}")
+        
+        try:
+            self.overlay.show_result(result)
+            self.logger.info("Overlay show_result called")
+        except Exception as e:
+            self.logger.error(f"Error showing overlay: {e}")
         
         if result.success:
             self.tray.show_message(

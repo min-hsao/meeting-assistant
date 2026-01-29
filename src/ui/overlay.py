@@ -179,6 +179,10 @@ class OverlayWindow(QWidget):
     
     def show_result(self, result: ResearchResult):
         """Display a research result"""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Overlay.show_result called for: {result.topic}")
+        
         self.title_label.setText(result.topic)
         
         if result.success:
@@ -195,9 +199,15 @@ class OverlayWindow(QWidget):
         self.adjustSize()
         self._position_window()
         
+        logger.info(f"Overlay geometry: {self.geometry()}, visible: {self.isVisible()}")
+        
         # Show with animation
         self.show()
+        self.raise_()  # Bring to front
+        self.activateWindow()  # Activate (but shouldn't steal focus due to flags)
         self.fade_in_anim.start()
+        
+        logger.info(f"Overlay shown, now visible: {self.isVisible()}")
         
         # Start auto-dismiss timer
         if self.auto_dismiss:
