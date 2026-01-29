@@ -49,36 +49,16 @@ class OpenAIProvider(BaseProvider):
                 "timeout": self.timeout_seconds,
             }
             
-            # Add web search tool if enabled
-            if self.web_search:
-                kwargs["tools"] = [{
-                    "type": "function",
-                    "function": {
-                        "name": "web_search",
-                        "description": "Search the web for current information",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {"type": "string", "description": "Search query"}
-                            },
-                            "required": ["query"]
-                        }
-                    }
-                }]
-                kwargs["tool_choice"] = "auto"
+            # Note: web_search tool disabled for MVP - model returns content directly
+            # TODO: Implement actual web search in Phase 3
             
             # Make API call
             response = await self._client.chat.completions.create(**kwargs)
             
-            # Handle tool calls if any
             message = response.choices[0].message
-            
-            if message.tool_calls:
-                # For MVP, we just note that web search was requested
-                # In production, you'd actually perform the search
-                logger.debug(f"Web search requested: {message.tool_calls}")
-            
             summary = message.content or ""
+            
+            logger.info(f"OpenAI response content length: {len(summary)}")
             latency_ms = int((time.time() - start_time) * 1000)
             
             logger.info(f"OpenAI research completed in {latency_ms}ms")
