@@ -37,9 +37,11 @@ DEFAULT_SETTINGS = {
             "that's important",
         ],
         "transcription_stop": [
+            "thank you",
+            "that helps",
+            "got it",
             "end note",
             "stop recording",
-            "got it",
         ],
         "custom": [],
     },
