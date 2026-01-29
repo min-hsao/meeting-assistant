@@ -173,9 +173,10 @@ class MeetingAssistant:
             self.session_logger,
         )
         
-        # Connect signals
-        self.processor.result_ready.connect(self._on_result)
-        self.processor.status_changed.connect(self._on_status_changed)
+        # Connect signals (use QueuedConnection for thread safety)
+        from PyQt6.QtCore import Qt
+        self.processor.result_ready.connect(self._on_result, Qt.ConnectionType.QueuedConnection)
+        self.processor.status_changed.connect(self._on_status_changed, Qt.ConnectionType.QueuedConnection)
         
         self.tray.pause_resume_clicked.connect(self._on_pause_resume)
         self.tray.quit_clicked.connect(self._on_quit)

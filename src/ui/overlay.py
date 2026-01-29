@@ -89,7 +89,7 @@ class OverlayWindow(QWidget):
         header_layout.addWidget(self.icon_label)
         
         self.title_label = QLabel("Topic")
-        self.title_label.setFont(QFont("system-ui", 14, QFont.Weight.Bold))
+        self.title_label.setFont(QFont(".AppleSystemUIFont", 14, QFont.Weight.Bold))
         self.title_label.setStyleSheet("color: white;")
         header_layout.addWidget(self.title_label, 1)
         
