@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
 from .config import SettingsManager
-from .audio import AudioCapture
+from .audio import AudioCapture, TranscriptionRecorder, TranscriptSegment
 from .speech import SpeechRecognizer, TriggerDetector
 from .research import ResearchEngine
 from .research.providers.base import ResearchResult
@@ -50,6 +50,9 @@ class AudioProcessor(QObject):
     
     result_ready = pyqtSignal(object)  # ResearchResult
     status_changed = pyqtSignal(str)   # Status string
+    transcription_ready = pyqtSignal(str, str)  # trigger, transcript
+    recording_started = pyqtSignal()
+    recording_stopped = pyqtSignal()
     
     def __init__(
         self,
@@ -58,6 +61,7 @@ class AudioProcessor(QObject):
         trigger_detector: TriggerDetector,
         research_engine: ResearchEngine,
         session_logger: SessionLogger,
+        transcription_recorder: TranscriptionRecorder,
     ):
         super().__init__()
         self.audio = audio_capture
@@ -65,11 +69,22 @@ class AudioProcessor(QObject):
         self.trigger_detector = trigger_detector
         self.research = research_engine
         self.logger = session_logger
+        self.recorder = transcription_recorder
         
         self._processing = False
     
     def on_audio(self, audio_data):
         """Handle audio data from capture"""
+        logger = logging.getLogger(__name__)
+        
+        # If recording, add audio to recorder
+        if self.recorder.is_recording:
+            segment = self.recorder.add_audio(audio_data)
+            if segment:
+                # Recording auto-stopped (silence or max duration)
+                self._process_transcript_segment(segment)
+            return  # Don't process triggers while recording
+        
         if self._processing:
             return
         
@@ -81,25 +96,70 @@ class AudioProcessor(QObject):
             text, confidence = self.recognizer.transcribe(audio_data)
             
             if text and confidence > 0.3:
-                logging.getLogger(__name__).debug(f"Transcribed: '{text}'")
+                logger.debug(f"Transcribed: '{text}'")
                 
                 # Check for triggers
                 match = self.trigger_detector.detect(text)
                 
-                if match and match.trigger_type == 'research' and match.topic:
-                    # Research the topic
-                    result = self.research.research_sync(match.topic)
-                    self.logger.log_search(result, match.trigger_phrase)
-                    logging.getLogger(__name__).info(f"Emitting result_ready signal for: {result.topic}")
-                    self.result_ready.emit(result)
-                    logging.getLogger(__name__).info("Signal emitted")
+                if match:
+                    if match.trigger_type == 'research' and match.topic:
+                        # Research the topic
+                        result = self.research.research_sync(match.topic)
+                        self.logger.log_search(result, match.trigger_phrase)
+                        logger.info(f"Emitting result_ready signal for: {result.topic}")
+                        self.result_ready.emit(result)
+                        
+                    elif match.trigger_type == 'transcription_start':
+                        # Start recording
+                        logger.info(f"Starting transcription recording: {match.trigger_phrase}")
+                        self.recorder.start_recording(
+                            match.trigger_phrase,
+                            self._process_transcript_segment
+                        )
+                        self.recording_started.emit()
+                        
+                    elif match.trigger_type == 'transcription_stop':
+                        # Stop recording
+                        if self.recorder.is_recording:
+                            logger.info("Stopping transcription recording")
+                            segment = self.recorder.stop_recording()
+                            if segment:
+                                self._process_transcript_segment(segment)
         
         except Exception as e:
-            logging.getLogger(__name__).error(f"Processing error: {e}")
+            logger.error(f"Processing error: {e}")
         
         finally:
             self._processing = False
-            self.status_changed.emit('listening')
+            if not self.recorder.is_recording:
+                self.status_changed.emit('listening')
+    
+    def _process_transcript_segment(self, segment: TranscriptSegment):
+        """Process a completed transcript segment"""
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Transcribe the recorded audio
+            logger.info(f"Transcribing {segment.duration_seconds:.1f}s of audio...")
+            transcript, confidence = self.recognizer.transcribe(segment.audio_data)
+            segment.transcript = transcript
+            
+            # Log to session
+            self.logger.log_transcript_segment(
+                trigger=segment.trigger,
+                transcript=transcript,
+                duration_seconds=segment.duration_seconds,
+            )
+            
+            logger.info(f"Transcript saved: {transcript[:100]}...")
+            
+            # Emit signal
+            self.transcription_ready.emit(segment.trigger, transcript)
+            self.recording_stopped.emit()
+            
+        except Exception as e:
+            logger.error(f"Error processing transcript: {e}")
+            self.recording_stopped.emit()
 
 
 class MeetingAssistant:
@@ -116,6 +176,7 @@ class MeetingAssistant:
         self._init_speech()
         self._init_research()
         self._init_logging()
+        self._init_transcription()
     
     def _init_audio(self):
         """Initialize audio capture"""
@@ -147,6 +208,15 @@ class MeetingAssistant:
         log_dir = self.settings.get_log_dir()
         self.session_logger = SessionLogger(log_dir)
     
+    def _init_transcription(self):
+        """Initialize transcription recorder"""
+        trans_config = self.settings.get('transcription')
+        self.transcription_recorder = TranscriptionRecorder(
+            sample_rate=self.settings.get('audio', 'sample_rate') or 16000,
+            auto_stop_silence_seconds=trans_config.get('auto_stop_silence_seconds', 5),
+            max_duration_seconds=trans_config.get('max_duration_seconds', 60),
+        )
+    
     def run(self):
         """Run the application"""
         # Create Qt application
@@ -173,12 +243,16 @@ class MeetingAssistant:
             self.trigger_detector,
             self.research,
             self.session_logger,
+            self.transcription_recorder,
         )
         
         # Connect signals (use QueuedConnection for thread safety)
         from PyQt6.QtCore import Qt
         self.processor.result_ready.connect(self._on_result, Qt.ConnectionType.QueuedConnection)
         self.processor.status_changed.connect(self._on_status_changed, Qt.ConnectionType.QueuedConnection)
+        self.processor.transcription_ready.connect(self._on_transcription, Qt.ConnectionType.QueuedConnection)
+        self.processor.recording_started.connect(self._on_recording_started, Qt.ConnectionType.QueuedConnection)
+        self.processor.recording_stopped.connect(self._on_recording_stopped, Qt.ConnectionType.QueuedConnection)
         
         self.tray.pause_resume_clicked.connect(self._on_pause_resume)
         self.tray.quit_clicked.connect(self._on_quit)
@@ -242,6 +316,25 @@ class MeetingAssistant:
     def _on_dismiss_overlay(self):
         """Dismiss current overlay"""
         self.overlay.dismiss()
+    
+    def _on_transcription(self, trigger: str, transcript: str):
+        """Handle completed transcription"""
+        self.logger.info(f"Transcription complete: {transcript[:100]}...")
+        self.tray.show_message(
+            "📝 Transcription Saved",
+            transcript[:150] + "..." if len(transcript) > 150 else transcript
+        )
+    
+    def _on_recording_started(self):
+        """Handle recording start"""
+        self.logger.info("Recording started")
+        self.tray.set_status('processing')
+        self.tray.show_message("🎙️ Recording", "Say 'end note' or wait for silence to stop")
+    
+    def _on_recording_stopped(self):
+        """Handle recording stop"""
+        self.logger.info("Recording stopped")
+        self.tray.set_status('listening')
     
     def _on_quit(self):
         """Clean shutdown"""
